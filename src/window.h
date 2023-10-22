@@ -1,6 +1,7 @@
 typedef struct window {
 	SDL_Window *sdl;
 	SDL_Renderer *renderer;
+	SDL_Surface *plot;
 	const Uint8 *keys;
 	TTF_Font *font;
 	struct text {
