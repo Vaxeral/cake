@@ -14,14 +14,10 @@ int window_init(Window *window)
 				TTF_GetError());
 		return 1;
 	}
-	window->sdl = SDL_CreateWindow(
-		"My SDL2 Window",
-		SDL_WINDOWPOS_UNDEFINED,
-		SDL_WINDOWPOS_UNDEFINED,
-		640,
-		480,
-		SDL_WINDOW_SHOWN
-	);
+	window->sdl = SDL_CreateWindow("My SDL2 Window",
+		SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+		640, 480,
+		SDL_WINDOW_SHOWN);
 	if(window->sdl == NULL) {
 		fprintf(stderr, "SDL window could not be created: %s\n",
 				SDL_GetError());
@@ -35,15 +31,27 @@ int window_init(Window *window)
 				SDL_GetError());
 		return 1;
 	}
+
 	window->font = TTF_OpenFont("font.ttf", 16);
 	if (window->font == NULL) {
+		SDL_DestroyRenderer(window->renderer);
+		SDL_DestroyWindow(window->sdl);
 		fprintf(stderr, "Font 'font.ttf' could not be opened: %s\n",
 				TTF_GetError());
+		return -1;
 	}
 	window->keys = SDL_GetKeyboardState(NULL);
+
 	window->text.lines = malloc(8 * sizeof(*window->text.lines));
+	if (window->text.lines == NULL) {
+		fprintf(stderr, "Failed allocating lines: %s\n",
+				strerror(errno));
+		return -1;
+	}
 	memset(&window->text.lines[0], 0, sizeof(*window->text.lines));
 	window->text.count = 1;
+
+	window->zoom = 1;
 	return 0;
 }
 
@@ -86,6 +94,24 @@ static void window_inputtext(Window *window, const char *utf8)
 	line->data[line->count] = '\0';
 }
 
+static void drawContour(SDL_Renderer *renderer, Sint32 x, Sint32 y, int edge) {
+	SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+	switch (edge) {
+	case 1:
+		SDL_RenderDrawLine(renderer, x, y, x + 1, y);
+		break;
+	case 2:
+		SDL_RenderDrawLine(renderer, x, y, x, y + 1);
+		break;
+	case 3:
+		SDL_RenderDrawLine(renderer, x, y, x + 1, y);
+		SDL_RenderDrawLine(renderer, x, y, x, y + 1);
+		break;
+	case 4:
+		break;
+	}
+}
+
 static void window_render(Window *window)
 {
 	struct text *text;
@@ -95,9 +121,10 @@ static void window_render(Window *window)
 	SDL_Color textColor;
 	SDL_Rect rect;
 
+	/* draw lines on the left */
 	text = &window->text;
 	renderer = window->renderer;
-	textColor = (SDL_Color) { 255, 0, 0, 255 };
+	textColor = (SDL_Color) { 205, 140, 0, 255 };
 	rect.x = 0;
 	rect.y = 0;
 	for (size_t i = 0; i < text->count; i++) {
@@ -115,14 +142,71 @@ static void window_render(Window *window)
 		SDL_FreeSurface(surface);
 		SDL_DestroyTexture(texture);
 	}
+
+	/* draw plot on the right */
+	number_t f(number_t x, number_t y)
+	{
+		return -x * x - y;
+	}
+	for (Sint32 i = 0; i < 640; i++)
+		for (Sint32 j = 0; j < 480; j++) {
+			number_t x, y;
+			Sint32 config;
+
+			x = i / window->zoom + window->translation.x;
+			y = j / window->zoom + window->translation.y;
+			const number_t cells[4] = {
+				f(x, y),
+				f(x + 1, y),
+				f(x + 1, y + 1),
+				f(x, y + 1),
+			};
+			config = 0;
+			for (Sint32 i = 0; i < 4; i++)
+				if (cells[i] <= 0)
+					config |= 1 << i;
+
+			switch (config) {
+			case 1:
+			case 14:
+				drawContour(renderer, i, j, 1);
+				break;
+			case 2:
+			case 13:
+				drawContour(renderer, i, j, 2);
+				break;
+			case 3:
+			case 12:
+				drawContour(renderer, i, j, 3);
+				break;
+			case 4:
+			case 11:
+				drawContour(renderer, i, j, 1);
+				break;
+			case 5:
+			case 10:
+				drawContour(renderer, i, j, 4);
+				break;
+			case 6:
+			case 9:
+				drawContour(renderer, i, j, 2);
+				break;
+			case 7:
+			case 8:
+				drawContour(renderer, i, j, 3);
+				break;
+			}
+		}
+
 }
 
 int window_show(Window *window)
 {
 	Uint64 start, end, ticks;
 	SDL_Event event;
+	const number_t zoomIncrement = 0.4;
+	bool dragging = false;
 
-	SDL_SetTextInputRect(&(SDL_Rect) { 0, 0, 640, 20 });
 	SDL_StartTextInput();
 	start = SDL_GetTicks64();
 	while (1) {
@@ -136,11 +220,30 @@ int window_show(Window *window)
 			case SDL_QUIT:
 				SDL_StopTextInput();
 				return 0;
-			case SDL_TEXTINPUT:
-				window_inputtext(window, event.text.text);
-				break;
 			case SDL_KEYDOWN:
 				window_handlekeyboard(window, &event.key);
+				break;
+			case SDL_MOUSEBUTTONDOWN:
+				dragging = true;
+				break;
+			case SDL_MOUSEBUTTONUP:
+				dragging = false;
+				break;
+			case SDL_MOUSEMOTION:
+				if (!dragging)
+					break;
+				window->translation.x -= event.motion.xrel / window->zoom;
+				window->translation.y -= event.motion.yrel / window->zoom;
+				break;
+			case SDL_MOUSEWHEEL:
+				window->translation.x *= window->zoom;
+				window->translation.y *= window->zoom;
+				window->zoom += zoomIncrement * event.wheel.y;
+				window->translation.x /= window->zoom;
+				window->translation.y /= window->zoom;
+				break;
+			case SDL_TEXTINPUT:
+				window_inputtext(window, event.text.text);
 				break;
 			}
 		}

@@ -11,6 +11,8 @@ typedef struct window {
 		size_t count;
 		size_t x, y;
 	} text;
+	Vector translation;
+	number_t zoom;
 } Window;
 
 int window_init(Window *window);
