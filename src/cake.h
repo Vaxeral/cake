@@ -9,6 +9,8 @@
 #include <string.h>
 #include <stdio.h>
 
+#define ARRLEN(a) (sizeof(a)/sizeof*(a))
+
 typedef long double number_t;
 
 typedef struct vector {

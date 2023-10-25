@@ -8,7 +8,7 @@ do_debug=false
 project_name=cake
 common_flags="-g"
 # -Ibuild needs to be included so that gcc can find the .gch file
-compiler_flags="$common_flags -Wall -Wextra -Ibuild -Isrc"
+compiler_flags="$common_flags -Werror -Wall -Wextra -Ibuild -Isrc"
 linker_flags="$common_flags"
 linker_libs="-lm -lSDL2 -lSDL2_ttf"
 
