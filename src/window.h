@@ -8,12 +8,15 @@ typedef struct window {
 		struct line {
 			char *data;
 			size_t count;
+			/* either variable or function */
+			size_t address;
 		} *lines;
 		size_t count;
 		size_t x, y;
 	} text;
 	Vector translation;
 	number_t zoom;
+	MathContext math;
 } Window;
 
 int window_init(Window *window);

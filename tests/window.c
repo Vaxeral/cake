@@ -1,4 +1,4 @@
-#include "cake.h"
+#include "../src/cake.h"
 
 int main(void)
 {

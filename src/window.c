@@ -10,7 +10,6 @@ static const struct symbols {
 	{ "real_numbers", "ℝ" },
 	{ "complex_numbers", "ℂ" },
 	{ "integers", "ℤ" },
-	{ "whole_numbers", "ℤ⁺" },
 	{ "natural_numbers", "ℕ" },
 	{ "maps_to", "↦" },
 	{ "subset_of", "⊆" },
@@ -95,6 +94,28 @@ err:
 	return -1;
 }
 
+static void window_updateline(Window *window)
+{
+	struct text *text;
+	struct line *line;
+	MathTokenizer tokenizer;
+
+	text = &window->text;
+	line = &text->lines[text->y];
+	line->data[line->count] = '\0';
+	memset(&tokenizer, 0, sizeof(tokenizer));
+	if (!math_tokenize(&window->math, &tokenizer, line->data)) {
+		printf("tokenizer failed: %s\n", math_error(&window->math));
+		return;
+	}
+	if (!math_parsegroup(&window->math, &tokenizer)) {
+		math_freetokenizer(&window->math, &tokenizer);
+		printf("parser failed: %s\n", math_error(&window->math));
+		return;
+	}
+	math_freetokenizer(&window->math, &tokenizer);
+}
+
 static void window_handlekeyboard(Window *window, SDL_KeyboardEvent *key)
 {
 	struct text *text;
@@ -130,7 +151,7 @@ static void window_handlekeyboard(Window *window, SDL_KeyboardEvent *key)
 				memmove(start, out, outLen);
 				line->count -= len - outLen;
 				text->x = s + outLen;
-				line->data[line->count] = '\0';
+				window_updateline(window);
 				break;
 			}
 		}
@@ -204,7 +225,7 @@ static void window_handlekeyboard(Window *window, SDL_KeyboardEvent *key)
 		memmove(&line->data[text->x],
 			&line->data[text->x + 1],
 			line->count - text->x);
-		line->data[line->count] = '\0';
+		window_updateline(window);
 		break;
 	}
 }
@@ -224,7 +245,7 @@ static void window_inputtext(Window *window, const char *utf8)
 	memcpy(&line->data[text->x], utf8, len);
 	text->x += len;
 	line->count += len;
-	line->data[line->count] = '\0';
+	window_updateline(window);
 }
 
 static void window_renderlines(Window *window)
@@ -285,6 +306,8 @@ static void window_renderplot(Window *window)
 	number_t invZoom;
 	Sint32 tx, ty;
 	Sint32 cellSize;
+	MathContext *ctx;
+	size_t xAddr, yAddr;
 	char buf[800];
 
 	renderer = window->renderer;
@@ -336,33 +359,43 @@ static void window_renderplot(Window *window)
 		}
 	}
 
-	number_t f(number_t x, number_t y)
-	{
-		return x * x + y * y - 9;
-	}
-	for (Sint32 i = 0; i < plot->w; i++) {
-		for (Sint32 j = 0; j < plot->h; j++) {
-			number_t x, y;
-			Sint32 config;
+	ctx = &window->math;
+	xAddr = math_pushlocal(ctx, 0);
+	yAddr = math_pushlocal(ctx, 0);
+	for (MathFunction *f = ctx->functions,
+			*e = &ctx->functions[ctx->numFunctions];
+			f != e; f++) {
+		number_t values[(plot->w + 2) * (plot->h + 2)];
+		for (Sint32 i = -1; i <= plot->w; i++) {
+			for (Sint32 j = -1; j <= plot->h; j++) {
+				number_t x, y, v;
 
-			x = i * invZoom + window->translation.x;
-			y = -(j * invZoom + window->translation.y);
-			const number_t cells[4] = {
-				f(x, y),
-				f(x + invZoom, y),
-				f(x + invZoom, y - invZoom),
-				f(x, y - invZoom),
-			};
-			config = 0;
-			for (Sint32 i = 0; i < 4; i++)
-				if (cells[i] <= 0)
-					config |= 1 << i;
-			if (config == 0 || config == 15)
-				continue;
-			pixels[i + j * plot->w] =
-				SDL_MapRGB(plot->format, 0, 255, 0);
+				x = i * invZoom + window->translation.x;
+				y = -(j * invZoom + window->translation.y);
+				math_setlocal(ctx, xAddr, x);
+				math_setlocal(ctx, yAddr, y);
+				v = math_computefunction(ctx, f);
+				values[i + 1 + (j + 1) * plot->w] = v;
+			}
+		}
+		for (Sint32 i = 0; i < plot->w; i++) {
+			for (Sint32 j = 0; j < plot->h; j++) {
+				Sint32 config = 0;
+
+				const Sint32 ind = i + 1 + (j + 1) * plot->w;
+				config |= (values[ind] > 0) << 0;
+				config |= (values[ind + 1] > 0) << 1;
+				config |= (values[ind + 1 - plot->w] > 0) << 2;
+				config |= (values[ind - plot->w] > 0) << 3;
+				if (config == 0 || config == 15)
+					continue;
+				pixels[i + j * plot->w] =
+					SDL_MapRGB(plot->format, 0, 255, 0);
+			}
 		}
 	}
+	math_poplocal(ctx);
+	math_poplocal(ctx);
 
 	SDL_UnlockSurface(plot);
 
