@@ -1,41 +1,83 @@
-typedef enum symbol {
-	CAKE_SUB,
-	CAKE_ADD,
-	CAKE_MUL,
-	CAKE_DIV,
-	CAKE_NUM,
-	CAKE_END,
-} Symbol;
+#include <stddef.h>
+#include <string.h>
+#include <ctype.h>
+#include <stdbool.h>
+#include <math.h>
 
-typedef enum tokenizer_state {
-	CAKE_TOKENIZE,
-	CAKE_SKIP_WHITESPACE,
-	CAKE_OVERFLOW,
-} TokenizerState;
+enum type {
+	TOKEN_SUBTRACT,
+	TOKEN_ADD,
+	TOKEN_DIVIDE,
+	TOKEN_MULTIPLY,
+	TOKEN_OPENING_PARENTHESIS,
+	TOKEN_CLOSING_PARENTHESIS,
+	TOKEN_CARRET,
 
-typedef struct {
-	Symbol symbol;
-	float number;
+	TOKEN_PERCENT,
+	TOKEN_BANG,
+	TOKEN_DEGREE,
+
+	TOKEN_NUMBER,
+	TOKEN_VARIABLE,
+
+	TOKEN_PI,
+	TOKEN_E,
+
+	TOKEN_AND,
+	TOKEN_OR,
+	TOKEN_XOR,
+	TOKEN_MOD,
+
+	TOKEN_SIN,
+	TOKEN_COS,
+	TOKEN_FLOOR,
+	TOKEN_CEIL,
+	TOKEN_EXP,
+	TOKEN_POW,
+	TOKEN_SQRT,
+	TOKEN_CBRT,
+	TOKEN_ROOT,
+	TOKEN_LOG,
+	TOKEN_LN,
+	TOKEN_LOG10,
+	TOKEN_ERFC,
+	TOKEN_TAN,
+	TOKEN_COT,
+	TOKEN_SEC,
+	TOKEN_CSC,
+	TOKEN_SINH,
+	TOKEN_COSH,
+	TOKEN_TANH,
+	TOKEN_ASINH,
+	TOKEN_ACOSH,
+	TOKEN_ATANH,
+	TOKEN_GAMMA,
+
+	TOKEN_END,
+	TOKEN_INVALID,
+};
+
+typedef long double number_t;
+typedef unsigned char byte_t;
+
+#define NAME_SIZE 32
+
+typedef struct token {
+	enum type type;
+	number_t value;
+	byte_t name[NAME_SIZE];
+	size_t lenName;
 } Token;
 
-#define TOKENS_SIZE 1024
-#define BUFFER_SIZE 64
+#define TOKENS_SIZE 256
 
 typedef struct tokenizer {
-	char buffer[BUFFER_SIZE];
-	size_t lenBuffer;
-	char *expression;
-	char *character;
 	Token tokens[TOKENS_SIZE];
-	size_t numTokens;
-	TokenizerState state;
+	size_t nTokens;
+	byte_t *bytes;
+	byte_t *bytesAhead;
 } Tokenizer;
 
-void tokenizer_init(Tokenizer *tokenizer, char *expression);
-char tokenizer_peek(Tokenizer *tokenizer);
-char tokenizer_advance(Tokenizer *tokenizer);
-void tokenizer_addtoken(Tokenizer *tokenizer, Token *token);
-Token *tokenizer_gettoken(Tokenizer *tokenizer);
-void tokenizer_putchar(Tokenizer *tokenizer, char character);
-int tokenizer_tokenize(Tokenizer *tokenizer, char *expression);
-
+void init(Tokenizer *tokenizer);
+void tokenize(Tokenizer *tokenizer, byte_t *bytes);
+number_t ld_parse(byte_t *bytes, int len);
