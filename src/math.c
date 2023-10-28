@@ -2,92 +2,124 @@
 
 number_t math_computegroup(MathContext *ctx, MathGroup *group)
 {
-	(void) ctx;
-	(void) group;
-	return 0;
+	switch (group->type) {
+	case GROUP_NUMBER:
+		return group->value;
+	case GROUP_ADD:
+		return math_computegroup(ctx, group->left) +
+			math_computegroup(ctx, group->right);
+	case GROUP_SUBTRACT:
+		return math_computegroup(ctx, group->left) -
+			math_computegroup(ctx, group->right);
+	case GROUP_MULTIPLY:
+		return math_computegroup(ctx, group->left) *
+			math_computegroup(ctx, group->right);
+	case GROUP_DIVIDE:
+		return math_computegroup(ctx, group->left) /
+			math_computegroup(ctx, group->right);
+	default:
+		return 0;
+	}
+ }
+
+struct math_parser {
+	MathContext *ctx;
+	MathTokenizer tokens;
+};
+
+static MathGroup *parse_expression(struct math_parser *parser, int precedence)
+{
+	static const struct {
+		enum math_token_type tokenType;
+		enum math_group_type groupType;
+		int precedence;
+	} precedences[] = {
+		{ TOKEN_PLUS, GROUP_ADD, 1 },
+		{ TOKEN_MINUS, GROUP_SUBTRACT, 1 },
+
+		{ TOKEN_MULTIPLY, GROUP_MULTIPLY, 2 },
+		{ TOKEN_DIVIDE, GROUP_DIVIDE, 2 },
+	};
+
+	MathToken token;
+	MathGroup *group;
+
+	group = malloc(sizeof(*group));
+	if (group == NULL) {
+		parser->ctx->error = MATH_MEMORY;
+		parser->ctx->errorNumber = errno;
+		goto err;
+	}
+
+	token = *parser->tokens.tokens;
+	switch(token.type) {
+	case TOKEN_NUMBER:
+		group->type = GROUP_NUMBER;
+		group->value = token.value;
+		break;
+	default:
+		goto err;
+	}
+	parser->tokens.tokens++;
+	parser->tokens.numTokens--;
+	if (parser->tokens.numTokens == 0)
+		return group;
+	token = *parser->tokens.tokens;
+
+	for(size_t i = 0; i < ARRLEN(precedences); ) {
+		MathGroup *right;
+		MathGroup *parent;
+
+		if (precedences[i].tokenType != token.type) {
+			i++;
+			continue;
+		}
+		if (precedences[i].precedence <= precedence)
+			break;
+		parent = malloc(sizeof(*parent));
+		if (parent == NULL) {
+			parser->ctx->error = MATH_MEMORY;
+			parser->ctx->errorNumber = errno;
+			goto err;
+		}
+		parent->type = precedences[i].groupType;
+		parent->left = group;
+		parent->right = NULL;
+		group = parent;
+
+		parser->tokens.tokens++;
+		parser->tokens.numTokens--;
+		if (parser->tokens.numTokens == 0)
+			goto err;
+		right = parse_expression(parser, precedences[i].precedence);
+		if (right == NULL)
+			goto err;
+		group->right = right;
+		if (parser->tokens.numTokens == 0)
+			break;
+		token = *parser->tokens.tokens;
+		/* go again */
+		i = 0;
+	}
+	return group;
+
+err:
+	free(group);
+	return NULL;
 }
-// {
-// 	(void) ctx;
-// 	(void) group;
 
-// 	int operatorPriority[] = {
-// 		[TOKEN_ADD] = 1,
-// 		[TOKEN_SUBTRACT] = 1,
-// 		[TOKEN_MULTIPLY] = 0,
-// 		[TOKEN_DIVIDE] = 0
-// 	};
-
-// 	if (group->type == GROUP_NUMBER && group->right == NULL)
-// 		return group->value;
-
-// 	group = group->right;
-
-// 	if (group->type == GROUP_OPERATOR) {
-// 		if (operatorPriotity[group->operator] != priority) {
-// 			switch (group->operator) {
-// 			case TOKEN_ADD:
-// 				return group->left->value + math_computegroup(ctx, group->right, priority);
-// 			case TOKEN_SUBTRACT:
-// 				return group->left->value - math_computegroup(ctx, group->right, priority);
-// 			case TOKEN_DIVIDE:
-// 				return group->left->value / math_computegroup(ctx, group->right, priority);
-// 			case TOKEN_MULTIPLY:
-// 				return group->left->value * math_computegroup(ctx, group->right, priority);
-// 			}
-// 		} else {
-// 			number_t number = group->left->value + group->right->value;
-// 			return number + 
-// 		}
-// 	}
-
-
-
-// 	return 0;
-// }
 
 bool math_parsegroup(MathContext *ctx, MathTokenizer *tokenizer)
 {
-	MathGroup *node;
-	MathGroup *prev;
+	struct math_parser parser;
+	MathGroup *group;
 
-	prev = NULL;
-	for (size_t i = 0; i < tokenizer->numTokens; i++) {
-		node = malloc(sizeof(*node));
-		memset(node, 0, sizeof(*node));
-
-		MathToken token = tokenizer->tokens[i];
-		switch (token.type) {
-		case TOKEN_NUMBER:
-			node->type = GROUP_NUMBER;
-			node->value = token.value;
-			break;
-		case TOKEN_ADD:
-		case TOKEN_SUBTRACT:
-		case TOKEN_MULTIPLY:
-		case TOKEN_DIVIDE:
-			node->type = GROUP_OPERATOR;
-			node->operator = token.type;
-			break;
-		default:
-			while (node != NULL) {
-				void *p = node;
-				node = node->left;
-				free(p);
-			}
-			return false;
-		}
-
-		node->left = prev;
-		if (prev != NULL)
-			prev->right = node;
-		prev = node;
-	}
-
-	while (node->left != NULL)
-		node = node->left;
-
-	math_computegroup(ctx, node);
-	return true;
+	parser.ctx = ctx;
+	parser.tokens = *tokenizer;
+	group = parse_expression(&parser, 0);
+	if (group != NULL)
+		printf("%LF\n", math_computegroup(ctx, group));
+	return group != NULL;
 }
 
 number_t math_computefunction(MathContext *ctx, MathFunction *func)
@@ -156,6 +188,7 @@ char *math_error(MathContext *ctx)
 		[MATH_MEMORY] = "failed allocating memory",
 		[MATH_INVALID_UTF8] = "the utf8 sequence is invalid",
 		[MATH_INVALID_TOKEN] = "the token is invalid",
+		[MATH_HANGING_OPERATOR] = "the operator is hanging at the end",
 	};
 	static char error[1024];
 
@@ -185,8 +218,8 @@ bool math_tokenize(MathContext *ctx, MathTokenizer *tokenizer, const char *text)
 		"and", "or", "xor", "mod"
 	};
 	static const enum math_token_type asciSymbols[] = {
-		['+'] = TOKEN_ADD,
-		['-'] = TOKEN_SUBTRACT,
+		['+'] = TOKEN_PLUS,
+		['-'] = TOKEN_MINUS,
 		['/'] = TOKEN_DIVIDE,
 		['*'] = TOKEN_MULTIPLY,
 		['%'] = TOKEN_PERCENT,

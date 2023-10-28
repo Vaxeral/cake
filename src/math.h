@@ -1,8 +1,8 @@
 enum math_token_type {
 	TOKEN_NULL,
 
-	TOKEN_ADD,
-	TOKEN_SUBTRACT,
+	TOKEN_PLUS,
+	TOKEN_MINUS,
 	TOKEN_DIVIDE,
 	TOKEN_MULTIPLY,
 
@@ -37,23 +37,26 @@ enum math_token_type {
 
 enum math_group_type {
 	GROUP_NULL,
+
 	GROUP_NUMBER,
-	GROUP_FUNCTION,
-	GROUP_OPERATOR,
+
+	GROUP_ADD,
+	GROUP_SUBTRACT,
+	GROUP_MULTIPLY,
+	GROUP_DIVIDE,
 };
 
 typedef struct math_group {
 	enum math_group_type type;
-	struct {
-		struct math_group *left;
-		struct math_group *right;
-	};
 	union {
 		number_t value;
-		enum math_token_type operator;
 		struct {
 			char name[256];
 			size_t numParameters;
+		};
+		struct {
+			struct math_group *left;
+			struct math_group *right;
 		};
 	};
 } MathGroup;
@@ -92,6 +95,7 @@ enum math_error {
 	MATH_MEMORY,
 	MATH_INVALID_UTF8,
 	MATH_INVALID_TOKEN,
+	MATH_HANGING_OPERATOR,
 	MATH_INVALID_CALL,
 };
 

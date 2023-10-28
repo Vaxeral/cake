@@ -9,8 +9,8 @@ int main(int argc, char *argv[])
 	static char *tokenNames[] = {
 		"null",
 
-		"add",
-		"subtract",
+		"plus",
+		"minus",
 		"divide",
 		"multiply",
 
@@ -50,7 +50,7 @@ int main(int argc, char *argv[])
 	memset(&ctx, 0, sizeof(ctx));
 	memset(&tokenizer, 0, sizeof(tokenizer));
 	if (!math_tokenize(&ctx, &tokenizer, text)) {
-		printf("tokenizing failed\n");
+		printf("tokenizing failed: %s\n", math_error(&ctx));
 		return -1;
 	}
 
@@ -59,7 +59,10 @@ int main(int argc, char *argv[])
 		printf("%s\n", tokenNames[token.type]);
 	}
 
-	math_parsegroup(&ctx, &tokenizer);
+	if (!math_parsegroup(&ctx, &tokenizer)) {
+		printf("parsing failed: %s\n", math_error(&ctx));
+		return -1;
+	}
 	
 	return 0;
 }
