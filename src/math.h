@@ -1,20 +1,3 @@
-typedef struct math_group {
-
-} MathGroup;
-
-typedef struct math_variable {
-	char name[256];
-	MathGroup *group;
-} MathVariable;
-
-typedef struct math_function {
-	char name[256];
-	char *parameters[256];
-	size_t numParameters;
-	MathGroup *group;
-	void *system;
-} MathFunction;
-
 enum math_token_type {
 	TOKEN_NULL,
 
@@ -52,6 +35,42 @@ enum math_token_type {
 	TOKEN_VARIABLE,
 };
 
+enum math_group_type {
+	GROUP_NULL,
+	GROUP_NUMBER,
+	GROUP_FUNCTION,
+	GROUP_OPERATOR,
+};
+
+typedef struct math_group {
+	enum math_group_type type;
+	struct {
+		struct math_group *left;
+		struct math_group *right;
+	};
+	union {
+		number_t value;
+		enum math_token_type operator;
+		struct {
+			char name[256];
+			size_t numParameters;
+		};
+	};
+} MathGroup;
+
+typedef struct math_variable {
+	char name[256];
+	MathGroup *group;
+} MathVariable;
+
+typedef struct math_function {
+	char name[256];
+	char (*parameters)[256];
+	size_t numParameters;
+	MathGroup *group;
+	void *system;
+} MathFunction;
+
 typedef struct math_token {
 	size_t position;
 	enum math_token_type type;
@@ -73,6 +92,7 @@ enum math_error {
 	MATH_MEMORY,
 	MATH_INVALID_UTF8,
 	MATH_INVALID_TOKEN,
+	MATH_INVALID_CALL,
 };
 
 typedef struct math_context {
@@ -82,7 +102,7 @@ typedef struct math_context {
 	size_t numLocals;
 	MathFunction *functions;
 	size_t numFunctions;
-
+	MathGroup *group;
 	enum math_error error;
 	int errorNumber;
 } MathContext;

@@ -4,8 +4,90 @@ number_t math_computegroup(MathContext *ctx, MathGroup *group)
 {
 	(void) ctx;
 	(void) group;
-	/* TODO: */
 	return 0;
+}
+// {
+// 	(void) ctx;
+// 	(void) group;
+
+// 	int operatorPriority[] = {
+// 		[TOKEN_ADD] = 1,
+// 		[TOKEN_SUBTRACT] = 1,
+// 		[TOKEN_MULTIPLY] = 0,
+// 		[TOKEN_DIVIDE] = 0
+// 	};
+
+// 	if (group->type == GROUP_NUMBER && group->right == NULL)
+// 		return group->value;
+
+// 	group = group->right;
+
+// 	if (group->type == GROUP_OPERATOR) {
+// 		if (operatorPriotity[group->operator] != priority) {
+// 			switch (group->operator) {
+// 			case TOKEN_ADD:
+// 				return group->left->value + math_computegroup(ctx, group->right, priority);
+// 			case TOKEN_SUBTRACT:
+// 				return group->left->value - math_computegroup(ctx, group->right, priority);
+// 			case TOKEN_DIVIDE:
+// 				return group->left->value / math_computegroup(ctx, group->right, priority);
+// 			case TOKEN_MULTIPLY:
+// 				return group->left->value * math_computegroup(ctx, group->right, priority);
+// 			}
+// 		} else {
+// 			number_t number = group->left->value + group->right->value;
+// 			return number + 
+// 		}
+// 	}
+
+
+
+// 	return 0;
+// }
+
+bool math_parsegroup(MathContext *ctx, MathTokenizer *tokenizer)
+{
+	MathGroup *node;
+	MathGroup *prev;
+
+	prev = NULL;
+	for (size_t i = 0; i < tokenizer->numTokens; i++) {
+		node = malloc(sizeof(*node));
+		memset(node, 0, sizeof(*node));
+
+		MathToken token = tokenizer->tokens[i];
+		switch (token.type) {
+		case TOKEN_NUMBER:
+			node->type = GROUP_NUMBER;
+			node->value = token.value;
+			break;
+		case TOKEN_ADD:
+		case TOKEN_SUBTRACT:
+		case TOKEN_MULTIPLY:
+		case TOKEN_DIVIDE:
+			node->type = GROUP_OPERATOR;
+			node->operator = token.type;
+			break;
+		default:
+			while (node != NULL) {
+				void *p = node;
+				node = node->left;
+				free(p);
+			}
+			return false;
+		}
+
+		node->left = prev;
+		if (prev != NULL)
+			prev->right = node;
+		prev = node;
+	}
+
+	while (node->left != NULL)
+		node = node->left;
+
+	math_computegroup(ctx, node);
+	return true;
 }
 
 number_t math_computefunction(MathContext *ctx, MathFunction *func)
@@ -240,12 +322,4 @@ void math_freetokenizer(MathContext *ctx, MathTokenizer *tokenizer)
 {
 	(void) ctx;
 	free(tokenizer->tokens);
-}
-
-bool math_parsegroup(MathContext *ctx, MathTokenizer *tokenizer)
-{
-	(void) ctx;
-	(void) tokenizer;
-	/* TODO: */
-	return false;
 }
